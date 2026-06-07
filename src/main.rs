@@ -19,6 +19,14 @@ struct Args {
     reset: bool,
 }
 
+fn get_vorbis_as_vec(tags: &mut Tag, key: &str) -> Result<Vec<String>> {
+    Ok(tags
+        .get_vorbis(key)
+        .ok_or(anyhow!("{key} tag not found"))?
+        .map(|v| v.to_string())
+        .collect())
+}
+
 fn get_vorbis_as_string(tags: &mut Tag, key: &str) -> Result<String> {
     Ok(tags
         .get_vorbis(key)
@@ -72,37 +80,39 @@ fn update_track_number(tags: &mut Tag, track: u16) -> Result<()> {
 }
 
 fn reset_artist(tags: &mut Tag) -> Result<()> {
-    let allartists = get_vorbis_as_string(tags, "ALLARTISTS")?;
+    let allartists = get_vorbis_as_vec(tags, "ALLARTISTS")?;
     let artist = get_vorbis_as_string(tags, "ARTIST")?;
     let title = get_vorbis_as_string(tags, "TITLE")?;
 
     tags.remove_vorbis("ALLARTISTS");
 
-    if allartists == artist {
+    if allartists.len() == 1 && artist == *allartists.first().unwrap() {
         log::debug!("\"{title}\": ARTIST needs no change");
         return Ok(());
     }
 
-    log::debug!("\"{title}\": resetting ARTIST: \"{artist}\" -> \"{allartists}\"");
-    tags.set_vorbis("ARTIST", vec![&allartists]);
+    log::debug!("\"{title}\": resetting ARTIST: \"{artist}\" -> \"{allartists:?}\"");
+    tags.set_vorbis("ARTIST", allartists);
 
     Ok(())
 }
 
 fn update_artist(tags: &mut Tag) -> Result<()> {
-    // If the ALBUMARTIST tag is populated, use it to set ARTIST and save the old value
+    // If the ALBUMARTIST tag is populated, use it to set ARTIST and save the old values
     let albumartist = get_vorbis_as_string(tags, "ALBUMARTIST")?;
-    let artist = get_vorbis_as_string(tags, "ARTIST")?;
+    let artists = get_vorbis_as_vec(tags, "ARTIST")?;
     let title = get_vorbis_as_string(tags, "TITLE")?;
 
-    tags.set_vorbis("ALLARTISTS", vec![&artist]);
+    log::warn!("Artists: {artists:?}");
 
-    if albumartist == artist {
+    if artists.len() == 1 && albumartist == *artists.first().unwrap() {
         log::debug!("\"{title}\": ARTIST needs no change");
         return Ok(());
     }
 
-    log::info!("\"{title}\": updating ARTIST: \"{artist}\" -> \"{albumartist}\"");
+    log::info!("\"{title}\": updating ARTIST: \"{artists:?}\" -> \"{albumartist}\"");
+    tags.set_vorbis("ALLARTISTS", artists);
+
     tags.set_vorbis("ARTIST", vec![&albumartist]);
 
     Ok(())
